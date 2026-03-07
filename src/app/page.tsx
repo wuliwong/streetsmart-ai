@@ -26,8 +26,9 @@ function HomeContent() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchLocation, setSearchLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [places, setPlaces] = useState<MapPlace[]>([]);
-  const [travelMode, setTravelMode] = useState<'walking' | 'driving'>('walking');
+  const [travelMode, setTravelMode] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   // Calculate Top 10 Closest Places dynamically
   const topPlaces = useMemo(() => {
@@ -114,8 +115,9 @@ function HomeContent() {
           const categoryMeta = CATEGORIES.find(c => c.id === categoryId);
           if (!categoryMeta) return null;
 
-          return fetch(`/api/places?lat=${searchLocation.lat}&lng=${searchLocation.lng}&query=${encodeURIComponent(categoryMeta.query)}&categoryId=${categoryId}`)
-            .then(res => res.json());
+          const params = new URLSearchParams({ lat: String(searchLocation.lat), lng: String(searchLocation.lng), query: categoryMeta.query, categoryId });
+          if ('placeType' in categoryMeta && categoryMeta.placeType) params.set('type', categoryMeta.placeType as string);
+          return fetch(`/api/places?${params.toString()}`).then(res => res.json());
         }).filter(Boolean);
 
         const results = await Promise.all(promises);
@@ -180,8 +182,12 @@ function HomeContent() {
             </section>
 
             <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
-              <div className="mb-4 flex items-end justify-between gap-3">
-                <div>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(o => !o)}
+                className="w-full flex items-end justify-between gap-3 mb-1 group"
+              >
+                <div className="text-left">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
                     Filters
                   </p>
@@ -189,30 +195,40 @@ function HomeContent() {
                     Pick the essentials and lifestyle spots you want to compare.
                   </p>
                 </div>
-                <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
-                  <span className="text-white">{selectedCategories.length}</span>/{CATEGORIES.length}
-                </span>
-              </div>
-              <CategoryScroller
-                activeCategories={activeCategories}
-                onCategoryToggle={handleCategoryToggle}
-              />
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                    <span className="text-white">{selectedCategories.length}</span>/{CATEGORIES.length}
+                  </span>
+                  <LucideIcons.ChevronDown
+                    size={16}
+                    className={`text-slate-500 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`}
+                  />
+                </div>
+              </button>
+              {filtersOpen && (
+                <div className="mt-4">
+                  <CategoryScroller
+                    activeCategories={activeCategories}
+                    onCategoryToggle={handleCategoryToggle}
+                  />
+                </div>
+              )}
             </section>
 
             {topPlaces.length > 0 && (
-              <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 flex flex-col h-[350px]">
-                <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
+              <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400/80 flex items-center gap-2">
                       <LucideIcons.Navigation size={12} /> Closest Places
                     </p>
                     <p className="mt-1 text-sm text-slate-400">
-                      Top {topPlaces.length} nearby spots based on {travelMode === 'walking' ? 'walking' : 'driving'}.
+                      Top {topPlaces.length} nearby spots based on {travelMode === 'walking' ? 'walking' : travelMode === 'transit' ? 'transit' : 'driving'}.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto pr-2 pb-2 space-y-3 custom-scrollbar">
+                <div className="space-y-3">
                   {topPlaces.map(place => {
                     const categoryMeta = CATEGORIES.find(c => c.id === place.category);
                     const IconComponent = categoryMeta ? (LucideIcons as unknown as Record<string, ComponentType<{ size?: number; className?: string }>>)[categoryMeta.iconName] || LucideIcons.MapPin : LucideIcons.MapPin;
@@ -241,7 +257,7 @@ function HomeContent() {
 
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             <div className={`px-2 py-1 rounded-md bg-black/40 border border-white/10 flex items-center gap-1.5`}>
-                              {travelMode === 'walking' ? <LucideIcons.Footprints size={10} className="text-slate-400" /> : <LucideIcons.Car size={10} className="text-slate-400" />}
+                              {travelMode === 'walking' ? <LucideIcons.Footprints size={10} className="text-slate-400" /> : travelMode === 'transit' ? <LucideIcons.TrainFront size={10} className="text-slate-400" /> : <LucideIcons.Car size={10} className="text-slate-400" />}
                               <span className="text-xs font-bold text-white tracking-wide">{place.etaStr}</span>
                             </div>
                             <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">
@@ -256,16 +272,16 @@ function HomeContent() {
               </section>
             )}
           </div>
-        </div>
 
-        <div className="shrink-0 border-t border-white/5 px-6 py-4 sm:px-8">
-          <nav className="flex items-center justify-center gap-4 text-[11px] font-medium text-slate-600">
-            <Link href="/about" className="hover:text-slate-400 transition-colors">About</Link>
-            <span className="text-slate-800">·</span>
-            <Link href="/privacy" className="hover:text-slate-400 transition-colors">Privacy</Link>
-            <span className="text-slate-800">·</span>
-            <Link href="/tos" className="hover:text-slate-400 transition-colors">Terms</Link>
-          </nav>
+          <div className="shrink-0 border-t border-white/5 px-6 py-4 sm:px-8">
+            <nav className="flex items-center justify-center gap-4 text-[11px] font-medium text-slate-600">
+              <Link href="/about" className="hover:text-slate-400 transition-colors">About</Link>
+              <span className="text-slate-800">·</span>
+              <Link href="/privacy" className="hover:text-slate-400 transition-colors">Privacy</Link>
+              <span className="text-slate-800">·</span>
+              <Link href="/tos" className="hover:text-slate-400 transition-colors">Terms</Link>
+            </nav>
+          </div>
         </div>
       </aside>
 

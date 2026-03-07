@@ -23,8 +23,9 @@ export function calculateDistanceStr(lat1: number, lon1: number, lat2: number, l
 // Approximate ETA based on straight-line distance and travel mode
 // Walking average: ~1.4 meters per second (~3.1 mph)
 // City driving average with lights (straight-line equivalent): ~6 meters per second (~13 mph)
-export function estimateETA(distanceMeters: number, mode: 'walking' | 'driving'): string {
-    const speedMs = mode === 'walking' ? 1.4 : 6.0;
+// Transit average including waits/stops: ~7 meters per second (~15 mph)
+export function estimateETA(distanceMeters: number, mode: 'walking' | 'driving' | 'transit'): string {
+    const speedMs = mode === 'walking' ? 1.4 : mode === 'transit' ? 7.0 : 6.0;
     const seconds = distanceMeters / speedMs;
     const minutes = Math.ceil(seconds / 60);
 

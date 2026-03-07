@@ -15,8 +15,8 @@ interface MapViewProps {
     onMapLoad?: () => void;
     searchLocation?: { lat: number; lng: number } | null;
     places?: MapPlace[];
-    travelMode: 'walking' | 'driving';
-    onTravelModeChange: (mode: 'walking' | 'driving') => void;
+    travelMode: 'walking' | 'driving' | 'transit';
+    onTravelModeChange: (mode: 'walking' | 'driving' | 'transit') => void;
     selectedPlace: MapPlace | null;
     onPlaceSelect: (place: MapPlace | null) => void;
 }
@@ -58,7 +58,8 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
         }
     }, [selectedPlace]);
 
-    // Fetch actual walking/driving route between the origin and hovered place
+    // Fetch actual route between the origin and hovered place
+    // Walking/driving use Mapbox Directions; transit uses Google Directions API (server-side)
     useEffect(() => {
         if (!searchLocation || !hoveredPlace) {
             const t = setTimeout(() => setRouteData(null), 0);
@@ -69,33 +70,36 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
 
         const fetchRoute = async () => {
             try {
-                // Using Mapbox Directions API dynamically based on travel mode
-                const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-                const profile = travelMode === 'walking' ? 'walking' : 'driving';
-                const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${searchLocation.lng},${searchLocation.lat};${hoveredPlace.lng},${hoveredPlace.lat}?geometries=geojson&access_token=${token}`;
-
-                const res = await fetch(url);
-                const data = await res.json();
-
-                if (isMounted && data.routes && data.routes[0]) {
-                    const durationInSeconds = data.routes[0].duration;
-                    const durationInMinutes = Math.ceil(durationInSeconds / 60);
-                    const durationStr = durationInMinutes > 60
-                        ? `${Math.floor(durationInMinutes / 60)}h ${durationInMinutes % 60}m`
-                        : `${durationInMinutes} min`;
-
-                    setRouteData({
-                        type: 'Feature',
-                        properties: { durationStr },
-                        geometry: data.routes[0].geometry
-                    });
+                if (travelMode === 'transit') {
+                    const url = `/api/directions?originLat=${searchLocation.lat}&originLng=${searchLocation.lng}&destLat=${hoveredPlace.lat}&destLng=${hoveredPlace.lng}&mode=transit`;
+                    const res = await fetch(url);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (isMounted) setRouteData(data);
+                } else {
+                    const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+                    const profile = travelMode === 'walking' ? 'walking' : 'driving';
+                    const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${searchLocation.lng},${searchLocation.lat};${hoveredPlace.lng},${hoveredPlace.lat}?geometries=geojson&access_token=${token}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (isMounted && data.routes?.[0]) {
+                        const durationInSeconds = data.routes[0].duration;
+                        const durationInMinutes = Math.ceil(durationInSeconds / 60);
+                        const durationStr = durationInMinutes > 60
+                            ? `${Math.floor(durationInMinutes / 60)}h ${durationInMinutes % 60}m`
+                            : `${durationInMinutes} min`;
+                        setRouteData({
+                            type: 'Feature',
+                            properties: { durationStr },
+                            geometry: data.routes[0].geometry
+                        });
+                    }
                 }
             } catch (err) {
-                console.error("Failed to fetch Mapbox directions", err);
+                console.error("Failed to fetch directions", err);
             }
         };
 
-        // Debounce slightly to prevent spamming the API when quickly mousing over multiple pins
         const timeoutId = setTimeout(() => {
             fetchRoute();
         }, 200);
@@ -104,7 +108,7 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
             isMounted = false;
             clearTimeout(timeoutId);
         };
-    }, [searchLocation, hoveredPlace]);
+    }, [searchLocation, hoveredPlace, travelMode]);
 
     // Lazy load the website for the selected place when they click on it
     // This prevents 429 errors from Google from trying to fetch 70 detail pages at once on the initial category scan
@@ -361,16 +365,23 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                     <button
                         onClick={() => onTravelModeChange('walking')}
                         className={`p-2 rounded-full transition-all duration-300 ${travelMode === 'walking' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
-                        title="Walking Directions"
+                        title="Walking"
                     >
                         <LucideIcons.Footprints size={18} />
                     </button>
                     <button
                         onClick={() => onTravelModeChange('driving')}
                         className={`p-2 rounded-full transition-all duration-300 ${travelMode === 'driving' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
-                        title="Driving Directions"
+                        title="Driving"
                     >
                         <LucideIcons.Car size={18} />
+                    </button>
+                    <button
+                        onClick={() => onTravelModeChange('transit')}
+                        className={`p-2 rounded-full transition-all duration-300 ${travelMode === 'transit' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
+                        title="Transit"
+                    >
+                        <LucideIcons.TrainFront size={18} />
                     </button>
                 </div>
 
@@ -416,7 +427,10 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                 )}
                             </div>
 
-                            <p className="text-slate-400 text-xs mb-3 font-medium uppercase tracking-wider">{selectedPlace.category}</p>
+                            <p className="text-slate-400 text-xs mb-3 font-medium uppercase tracking-wider">
+                                {selectedPlace.placeTypes?.find(t => !['point_of_interest', 'establishment', 'premise', 'political'].includes(t))
+                                    ?.replace(/_/g, ' ') ?? selectedPlace.category}
+                            </p>
 
                             <div className="flex items-start gap-2 text-sm text-slate-300 mb-2">
                                 <LucideIcons.MapPin size={14} className="text-cyan-400 shrink-0 mt-0.5" />

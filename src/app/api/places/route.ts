@@ -1,11 +1,31 @@
 import { NextResponse } from 'next/server';
 
+type RawPlace = Record<string, unknown>;
+
+function mapPlace(place: RawPlace, categoryId: string | null) {
+    const geometry = place.geometry as { location: { lat: number, lng: number } };
+    const photos = place.photos as Array<{ photo_reference: string }> | undefined;
+    return {
+        id: place.place_id as string,
+        name: place.name as string,
+        address: (place.formatted_address ?? place.vicinity) as string,
+        placeTypes: place.types as string[] | undefined,
+        photoRef: photos?.[0]?.photo_reference,
+        lat: geometry.location.lat,
+        lng: geometry.location.lng,
+        category: categoryId,
+        rating: place.rating as number,
+        userRatingsTotal: place.user_ratings_total as number,
+    };
+}
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
     const query = searchParams.get('query');
     const categoryId = searchParams.get('categoryId');
+    const typesParam = searchParams.get('type');
 
     if (!lat || !lng || !query) {
         return NextResponse.json({ error: 'lat, lng, and query are required' }, { status: 400 });
@@ -17,47 +37,37 @@ export async function GET(request: Request) {
     }
 
     try {
-        // using the older Places TextSearch API which is robust and supports simple queries + location bias
-        // We append the location and a 5000 meter radius (about 3 miles)
-        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${lat},${lng}&radius=5000&key=${apiKey}`;
+        let allResults: RawPlace[] = [];
 
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.status === 'OK') {
-            // Map the messy Google Places payload into our clean standard MapPlace interface
-            // Photo reference extraction is cheap, so we grab the string here, but we will construct the heavy image URL lazily.
-            const places = data.results.map((place: Record<string, unknown>) => {
-                const geometry = place.geometry as { location: { lat: number, lng: number } };
-                const placeId = place.place_id as string;
-
-                let photoRef: string | undefined = undefined;
-
-                // Extract photo if available from the search results
-                const photos = place.photos as Array<{ photo_reference: string, maxwidth: number }> | undefined;
-                if (photos && photos.length > 0) {
-                    photoRef = photos[0].photo_reference;
+        if (typesParam) {
+            // NearbySearch ranked by distance — one call per type, then merge + deduplicate
+            const types = typesParam.split(',').map(t => t.trim()).filter(Boolean);
+            const fetches = types.map(type =>
+                fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&rankby=distance&type=${encodeURIComponent(type)}&key=${apiKey}`)
+                    .then(r => r.json())
+                    .then(d => (d.status === 'OK' ? d.results as RawPlace[] : []))
+            );
+            const results = await Promise.all(fetches);
+            const merged = results.flat();
+            // Deduplicate by place_id
+            const seen = new Set<string>();
+            for (const place of merged) {
+                const id = place.place_id as string;
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    allResults.push(place);
                 }
-
-                return {
-                    id: placeId,
-                    name: place.name as string,
-                    address: place.formatted_address as string,
-                    photoRef,
-                    lat: geometry.location.lat,
-                    lng: geometry.location.lng,
-                    category: categoryId, // Pass back the internal ID so the frontend knows what icon/color to paint
-                    rating: place.rating as number,
-                    userRatingsTotal: place.user_ratings_total as number,
-                };
-            });
-
-            return NextResponse.json({ places });
-        } else if (data.status === 'ZERO_RESULTS') {
-            return NextResponse.json({ places: [] });
+            }
         } else {
-            return NextResponse.json({ error: 'Places search failed', details: data.status }, { status: 400 });
+            // TextSearch with location bias (legacy fallback — no category needs this anymore)
+            const res = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${lat},${lng}&radius=5000&key=${apiKey}`);
+            const data = await res.json();
+            if (data.status === 'OK') allResults = data.results;
         }
+
+        const places = allResults.map(place => mapPlace(place, categoryId));
+        return NextResponse.json({ places });
+
     } catch (error) {
         console.error('Places API error:', error);
         return NextResponse.json({ error: 'Failed to fetch places data' }, { status: 500 });
