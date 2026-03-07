@@ -10,6 +10,7 @@ import { MapView } from '@/components/MapView';
 import { CATEGORIES } from '@/lib/constants';
 import type { MapPlace } from '@/types';
 import { calculateDistanceStr, estimateETA } from '@/lib/distance';
+import Link from 'next/link';
 import * as LucideIcons from 'lucide-react';
 
 function HomeContent() {
@@ -255,6 +256,16 @@ function HomeContent() {
               </section>
             )}
           </div>
+        </div>
+
+        <div className="shrink-0 border-t border-white/5 px-6 py-4 sm:px-8">
+          <nav className="flex items-center justify-center gap-4 text-[11px] font-medium text-slate-600">
+            <Link href="/about" className="hover:text-slate-400 transition-colors">About</Link>
+            <span className="text-slate-800">·</span>
+            <Link href="/privacy" className="hover:text-slate-400 transition-colors">Privacy</Link>
+            <span className="text-slate-800">·</span>
+            <Link href="/tos" className="hover:text-slate-400 transition-colors">Terms</Link>
+          </nav>
         </div>
       </aside>
 
