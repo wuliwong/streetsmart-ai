@@ -306,6 +306,23 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                 onMouseEnter={() => setHoveredPlace(place)}
                                 onMouseLeave={() => setHoveredPlace(null)}
                             >
+                                {/* Hover tooltip — hidden when place is already selected */}
+                                {!isSelected && (
+                                    <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50">
+                                        <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl px-3 py-2 shadow-xl text-left" style={{ minWidth: '140px', maxWidth: '220px' }}>
+                                            <p className="text-white text-xs font-semibold leading-snug">{place.name}</p>
+                                            <p className="text-slate-400 text-xs mt-0.5 capitalize">
+                                                {place.placeTypes?.find(t => !['point_of_interest', 'establishment', 'premise', 'political'].includes(t))
+                                                    ?.replace(/_/g, ' ') ?? place.category}
+                                            </p>
+                                            {place.address && (
+                                                <p className="text-slate-500 text-xs mt-1 leading-snug line-clamp-2">{place.address}</p>
+                                            )}
+                                        </div>
+                                        <div className="w-2 h-2 bg-black/90 border-b border-r border-white/10 rotate-45 mx-auto -mt-1" />
+                                    </div>
+                                )}
+
                                 {/* The solid, softly rounded category pin container */}
                                 <div className={`relative z-10 p-2.5 border rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.5)] transition-all duration-300 ${isSelected ? '-translate-y-2 ' + (categoryMeta?.bgColor || 'bg-slate-700') + ' border-white/50' : 'bg-[#1a1a24] border-white/10 group-hover:-translate-y-1 group-hover:border-white/30'}`}>
                                     <IconComponent size={16} className={`transition-colors ${isSelected ? 'text-white' : categoryMeta ? categoryMeta.iconActiveClass : 'text-slate-400'}`} />
