@@ -7,13 +7,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { SearchBar } from '@/components/SearchBar';
 import { CategoryScroller } from '@/components/CategoryScroller';
 import { MapView } from '@/components/MapView';
+import { BrandWordmark } from '@/components/BrandWordmark';
 import { CATEGORIES } from '@/lib/constants';
 import type { MapPlace } from '@/types';
 import { calculateDistanceStr, estimateETA } from '@/lib/distance';
 import { calculateStreetSmartsScore } from '@/lib/scoring';
 import Link from 'next/link';
 import * as LucideIcons from 'lucide-react';
-import { motion, useAnimation } from 'framer-motion';
+import { motion, useAnimation, useDragControls } from 'framer-motion';
 
 function HomeContent() {
   const router = useRouter();
@@ -34,6 +35,7 @@ function HomeContent() {
 
   const [isMobile, setIsMobile] = useState(false);
   const controls = useAnimation();
+  const dragControls = useDragControls();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -168,6 +170,8 @@ function HomeContent() {
     <main className="flex min-h-screen w-full flex-col bg-[#050505] text-white md:h-screen md:flex-row md:overflow-hidden md:p-4 font-sans bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#050505] to-black relative">
       <motion.aside
         drag={isMobile ? "y" : false}
+        dragControls={dragControls}
+        dragListener={false}
         dragConstraints={{ top: 0, bottom: isMobile ? window.innerHeight * 0.85 - 36 : 0 }}
         dragElastic={0.2}
         onDragEnd={(event, info) => {
@@ -195,22 +199,26 @@ function HomeContent() {
         animate={controls}
         initial={false}
         className={`z-50 flex w-full flex-col bg-black/40 backdrop-blur-xl md:static md:order-1 md:h-full md:w-[380px] lg:w-[430px] md:overflow-hidden md:rounded-[32px] md:border md:border-white/10 md:shadow-[0_0_40px_rgba(0,0,0,0.8)] ${isMobile ? 'fixed bottom-0 left-0 right-0 rounded-t-[32px] border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.8)]' : ''}`}
-        style={{ height: isMobile ? '85vh' : '100%', touchAction: "none" }}
+        style={{ height: isMobile ? '85vh' : '100%' }}
       >
         {isMobile && (
-          <div className="flex w-full justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing shrink-0">
+          <div
+            className="flex w-full justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+            onPointerDown={(event) => dragControls.start(event)}
+          >
             <div className="w-12 h-1.5 bg-white/20 rounded-full" />
           </div>
         )}
 
         <div className="flex h-full flex-col overflow-hidden">
-          <div className="border-b border-white/10 px-6 pb-4 pt-4 sm:px-8 bg-gradient-to-b from-white/5 to-transparent flex items-center justify-center shrink-0">
-            <h1 className="text-3xl font-black tracking-tight text-white drop-shadow-md">
-              Street<span className="text-cyan-400">Smarts</span>
-            </h1>
+          <div className="border-b border-white/10 px-6 py-5 sm:px-8 bg-gradient-to-b from-white/5 to-transparent flex items-center justify-center shrink-0">
+            <BrandWordmark size="sidebar" className="drop-shadow-md" />
           </div>
 
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6 sm:px-8 relative pb-32 md:pb-6" style={{ touchAction: "pan-y" }}>
+          <div
+            className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-6 sm:px-8 relative pb-32 md:pb-6"
+            style={{ touchAction: "pan-y" }}
+          >
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200px] h-[200px] bg-cyan-500/5 rounded-full blur-[60px] pointer-events-none" />
 
             <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">

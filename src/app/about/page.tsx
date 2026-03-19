@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { BrandWordmark } from '@/components/BrandWordmark';
 
 export const metadata: Metadata = {
   title: 'About – StreetSmarts',
@@ -15,9 +16,7 @@ export default function AboutPage() {
           Back to StreetSmarts
         </Link>
 
-        <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-md mb-6">
-          Street<span className="text-cyan-400">Smarts</span>
-        </h1>
+        <BrandWordmark size="lg" className="mb-6 drop-shadow-md" />
         <p className="text-slate-500 text-sm uppercase tracking-widest font-semibold mb-12">About</p>
 
         <div className="space-y-8 text-slate-300 leading-relaxed">
