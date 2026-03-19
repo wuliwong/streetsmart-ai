@@ -15,8 +15,8 @@ export default function AboutPage() {
           Back to StreetSmarts
         </Link>
 
-        <h1 className="text-4xl font-black tracking-tight text-white mb-2">
-          Street<span className="text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-500">Smarts</span>
+        <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-md mb-6">
+          Street<span className="text-cyan-400">Smarts</span>
         </h1>
         <p className="text-slate-500 text-sm uppercase tracking-widest font-semibold mb-12">About</p>
 

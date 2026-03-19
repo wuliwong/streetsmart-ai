@@ -58,10 +58,12 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
         }
     }, [selectedPlace]);
 
-    // Fetch actual route between the origin and hovered place
+    const targetPlace = hoveredPlace || selectedPlace;
+
+    // Fetch actual route between the origin and hovered/selected place
     // Walking/driving use Mapbox Directions; transit uses Google Directions API (server-side)
     useEffect(() => {
-        if (!searchLocation || !hoveredPlace) {
+        if (!searchLocation || !targetPlace) {
             const t = setTimeout(() => setRouteData(null), 0);
             return () => clearTimeout(t);
         }
@@ -71,7 +73,7 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
         const fetchRoute = async () => {
             try {
                 if (travelMode === 'transit') {
-                    const url = `/api/directions?originLat=${searchLocation.lat}&originLng=${searchLocation.lng}&destLat=${hoveredPlace.lat}&destLng=${hoveredPlace.lng}&mode=transit`;
+                    const url = `/api/directions?originLat=${searchLocation.lat}&originLng=${searchLocation.lng}&destLat=${targetPlace.lat}&destLng=${targetPlace.lng}&mode=transit`;
                     const res = await fetch(url);
                     if (!res.ok) return;
                     const data = await res.json();
@@ -79,7 +81,7 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                 } else {
                     const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
                     const profile = travelMode === 'walking' ? 'walking' : 'driving';
-                    const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${searchLocation.lng},${searchLocation.lat};${hoveredPlace.lng},${hoveredPlace.lat}?geometries=geojson&access_token=${token}`;
+                    const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${searchLocation.lng},${searchLocation.lat};${targetPlace.lng},${targetPlace.lat}?geometries=geojson&access_token=${token}`;
                     const res = await fetch(url);
                     const data = await res.json();
                     if (isMounted && data.routes?.[0]) {
@@ -108,7 +110,7 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
             isMounted = false;
             clearTimeout(timeoutId);
         };
-    }, [searchLocation, hoveredPlace, travelMode]);
+    }, [searchLocation, targetPlace, travelMode]);
 
     // Lazy load the website for the selected place when they click on it
     // This prevents 429 errors from Google from trying to fetch 70 detail pages at once on the initial category scan
@@ -233,6 +235,10 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                 minZoom={3}
                 pitchWithRotate={true}
                 dragRotate={true}
+                onClick={() => {
+                    // Clicking map background clears selection
+                    if (selectedPlace) onPlaceSelect(null);
+                }}
             >
                 <NavigationControl position="bottom-right" showCompass={false} />
 
@@ -346,8 +352,8 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                 'line-cap': 'round'
                             }}
                             paint={{
-                                'line-color': hoveredPlace
-                                    ? (CATEGORIES.find(c => c.id === hoveredPlace.category)?.color || '#00f0ff')
+                                'line-color': targetPlace
+                                    ? (CATEGORIES.find(c => c.id === targetPlace.category)?.color || '#00f0ff')
                                     : '#00f0ff',
                                 'line-width': 4,
                                 'line-opacity': 0.8

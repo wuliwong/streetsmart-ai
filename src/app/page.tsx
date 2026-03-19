@@ -10,8 +10,10 @@ import { MapView } from '@/components/MapView';
 import { CATEGORIES } from '@/lib/constants';
 import type { MapPlace } from '@/types';
 import { calculateDistanceStr, estimateETA } from '@/lib/distance';
+import { calculateStreetSmartsScore } from '@/lib/scoring';
 import Link from 'next/link';
 import * as LucideIcons from 'lucide-react';
+import { motion, useAnimation } from 'framer-motion';
 
 function HomeContent() {
   const router = useRouter();
@@ -29,6 +31,20 @@ function HomeContent() {
   const [travelMode, setTravelMode] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(true);
+
+  const [isMobile, setIsMobile] = useState(false);
+  const controls = useAnimation();
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const addressScore = useMemo(() => {
+    return calculateStreetSmartsScore(searchLocation, places, activeCategories, travelMode);
+  }, [searchLocation, places, activeCategories, travelMode]);
 
   // Calculate Top 10 Closest Places dynamically
   const topPlaces = useMemo(() => {
@@ -149,16 +165,52 @@ function HomeContent() {
   const selectedCategories = CATEGORIES.filter((category) => activeCategories.includes(category.id));
 
   return (
-    <main className="flex min-h-screen w-full flex-col bg-[#050505] text-white md:h-screen md:flex-row md:overflow-hidden md:p-4 font-sans bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#050505] to-black">
-      <aside className="order-2 z-20 flex w-full shrink-0 flex-col bg-black/40 backdrop-blur-xl md:order-1 md:h-full md:w-[380px] lg:w-[430px] md:overflow-hidden md:rounded-[32px] md:border md:border-white/10 md:shadow-[0_0_40px_rgba(0,0,0,0.8)]">
-        <div className="flex h-full flex-col">
-          <div className="border-b border-white/10 px-6 pb-6 pt-7 sm:px-8 bg-gradient-to-b from-white/5 to-transparent flex items-center justify-center">
+    <main className="flex min-h-screen w-full flex-col bg-[#050505] text-white md:h-screen md:flex-row md:overflow-hidden md:p-4 font-sans bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#050505] to-black relative">
+      <motion.aside
+        drag={isMobile ? "y" : false}
+        dragConstraints={{ top: 0, bottom: isMobile ? window.innerHeight * 0.85 - 36 : 0 }}
+        dragElastic={0.2}
+        onDragEnd={(event, info) => {
+          if (!isMobile) return;
+          
+          const collapseY = window.innerHeight * 0.85 - 36;
+          
+          // Snap down to handle if dragged down hard or far enough
+          if (info.velocity.y > 400 || info.offset.y > 100) {
+            controls.start({ y: collapseY });
+          } 
+          // Snap back up if dragged up hard or far enough
+          else if (info.velocity.y < -400 || info.offset.y < -100) {
+            controls.start({ y: 0 });
+          } 
+          // Otherwise snap to nearest state based on absolute pointer position
+          else {
+            if (info.point.y > window.innerHeight / 2) {
+              controls.start({ y: collapseY });
+            } else {
+              controls.start({ y: 0 });
+            }
+          }
+        }}
+        animate={controls}
+        initial={false}
+        className={`z-50 flex w-full flex-col bg-black/40 backdrop-blur-xl md:static md:order-1 md:h-full md:w-[380px] lg:w-[430px] md:overflow-hidden md:rounded-[32px] md:border md:border-white/10 md:shadow-[0_0_40px_rgba(0,0,0,0.8)] ${isMobile ? 'fixed bottom-0 left-0 right-0 rounded-t-[32px] border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.8)]' : ''}`}
+        style={{ height: isMobile ? '85vh' : '100%', touchAction: "none" }}
+      >
+        {isMobile && (
+          <div className="flex w-full justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing shrink-0">
+            <div className="w-12 h-1.5 bg-white/20 rounded-full" />
+          </div>
+        )}
+
+        <div className="flex h-full flex-col overflow-hidden">
+          <div className="border-b border-white/10 px-6 pb-4 pt-4 sm:px-8 bg-gradient-to-b from-white/5 to-transparent flex items-center justify-center shrink-0">
             <h1 className="text-3xl font-black tracking-tight text-white drop-shadow-md">
-              Street<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Smarts</span>
+              Street<span className="text-cyan-400">Smarts</span>
             </h1>
           </div>
 
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6 sm:px-8 relative">
+          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6 sm:px-8 relative pb-32 md:pb-6" style={{ touchAction: "pan-y" }}>
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200px] h-[200px] bg-cyan-500/5 rounded-full blur-[60px] pointer-events-none" />
 
             <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
@@ -180,6 +232,40 @@ function HomeContent() {
               </div>
               <SearchBar onSearch={handleSearch} isSearching={isSearching} initialQuery={searchQuery} />
             </section>
+
+            {addressScore && (
+              <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-5 shadow-[0_0_30px_rgba(0,240,255,0.05)] transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                       <LucideIcons.Sparkles className="text-cyan-400" size={18} />
+                       StreetSmarts Score
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">Based on {activeCategories.length} selected categories.</p>
+                  </div>
+                  <div className="flex items-center justify-center shrink-0 w-16 h-16 rounded-full border-[3px] border-cyan-500/50 bg-black/60 shadow-[0_0_20px_rgba(0,240,255,0.2)]">
+                    <span className="text-2xl font-black text-cyan-400">
+                      {addressScore.totalScore}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                   <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Density</div>
+                      <div className="text-sm font-semibold text-white">{addressScore.densityScore}<span className="text-[10px] text-slate-500 ml-0.5">/35</span></div>
+                   </div>
+                   <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Quality</div>
+                      <div className="text-sm font-semibold text-white">{addressScore.qualityScore}<span className="text-[10px] text-slate-500 ml-0.5">/35</span></div>
+                   </div>
+                   <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Proximity</div>
+                      <div className="text-sm font-semibold text-white">{addressScore.proximityScore}<span className="text-[10px] text-slate-500 ml-0.5">/30</span></div>
+                   </div>
+                </div>
+              </section>
+            )}
 
             <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
               <button
@@ -283,9 +369,9 @@ function HomeContent() {
             </nav>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
-      <div className="relative order-1 min-h-[52vh] flex-1 overflow-hidden bg-black md:order-2 md:h-full md:rounded-[32px] md:border md:border-white/10 md:shadow-[0_0_40px_rgba(0,0,0,0.8)] ml-0 md:ml-4">
+      <div className="absolute inset-0 z-0 h-screen w-full md:relative md:order-2 md:h-full md:flex-1 md:overflow-hidden md:rounded-[32px] md:border md:border-white/10 md:shadow-[0_0_40px_rgba(0,0,0,0.8)] md:ml-4 bg-black">
         <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_top_left,rgba(0,240,255,0.08),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.08),transparent_40%)]" />
         <MapView
           searchLocation={searchLocation}
