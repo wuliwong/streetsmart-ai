@@ -8,6 +8,7 @@ import { SearchBar } from '@/components/SearchBar';
 import { CategoryScroller } from '@/components/CategoryScroller';
 import { MapView } from '@/components/MapView';
 import { BrandWordmark } from '@/components/BrandWordmark';
+import { WeatherPanel } from '@/components/WeatherPanel';
 import { CATEGORIES } from '@/lib/constants';
 import type { MapPlace } from '@/types';
 import { calculateDistanceStr, estimateETA } from '@/lib/distance';
@@ -274,6 +275,8 @@ function HomeContent() {
                 </div>
               </section>
             )}
+
+            <WeatherPanel searchLocation={searchLocation} />
 
             <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
               <button
