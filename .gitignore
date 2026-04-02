@@ -42,3 +42,4 @@ next-env.d.ts
 
 # external data
 /school_data/
+src/data/*.json
