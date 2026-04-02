@@ -9,22 +9,31 @@ import { CategoryScroller } from '@/components/CategoryScroller';
 import { MapView } from '@/components/MapView';
 import { BrandWordmark } from '@/components/BrandWordmark';
 import { WeatherPanel } from '@/components/WeatherPanel';
+import SchoolSmartsPanel, { SchoolFilters } from '@/components/SchoolSmartsPanel';
 import { CATEGORIES } from '@/lib/constants';
 import type { MapPlace } from '@/types';
 import { calculateDistanceStr, estimateETA } from '@/lib/distance';
 import { calculateStreetSmartsScore } from '@/lib/scoring';
 import Link from 'next/link';
 import * as LucideIcons from 'lucide-react';
-import { motion, useAnimation, useDragControls } from 'framer-motion';
+import { motion, useAnimation } from 'framer-motion';
 
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Initialize state from URL on first load
+  // Initialize state from URL on first load, defaulting to 'schools' if empty
   const [activeCategories, setActiveCategories] = useState<string[]>(
-    searchParams.get('categories')?.split(',').filter(Boolean) || []
+    searchParams.get('categories') 
+      ? searchParams.get('categories')!.split(',').filter(Boolean)
+      : ['schools']
   );
+  
+  const [schoolFilters, setSchoolFilters] = useState<SchoolFilters>({
+    sectors: searchParams.get('schoolSectors')?.split(',').filter(Boolean) || ['public', 'charter'],
+    levels: searchParams.get('schoolLevels')?.split(',').filter(Boolean) || ['elementary', 'middle', 'high']
+  });
+
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
 
   const [isSearching, setIsSearching] = useState(false);
@@ -32,11 +41,14 @@ function HomeContent() {
   const [places, setPlaces] = useState<MapPlace[]>([]);
   const [travelMode, setTravelMode] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
+  const [searchOpen, setSearchOpen] = useState(true);
+  const [scoreOpen, setScoreOpen] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [closestOpen, setClosestOpen] = useState(true);
 
   const [isMobile, setIsMobile] = useState(false);
+  const [isSheetCollapsed, setIsSheetCollapsed] = useState(false);
   const controls = useAnimation();
-  const dragControls = useDragControls();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -79,16 +91,38 @@ function HomeContent() {
     }
     if (activeCategories.length > 0) {
       params.set('categories', activeCategories.join(','));
+      if (activeCategories.includes('schools')) {
+        params.set('schoolSectors', schoolFilters.sectors.join(','));
+        params.set('schoolLevels', schoolFilters.levels.join(','));
+      }
     }
 
     const newSearch = params.toString() ? `?${params.toString()}` : '';
     const newUrl = `/${newSearch}`;
 
-    // Only push to router if the URL actually changed to prevent infinite loops from searchParams updates
-    if (window.location.search !== newSearch) {
+    // Compare native keys and decoded values to prevent infinite loops caused by varying URL encodings (+ vs %20) between browsers and Next.js routers
+    const sp1 = new URLSearchParams(params.toString());
+    const sp2 = new URLSearchParams(searchParams.toString());
+
+    let isChanged = false;
+    const keys1 = Array.from(sp1.keys());
+    const keys2 = Array.from(sp2.keys());
+
+    if (keys1.length !== keys2.length) {
+      isChanged = true;
+    } else {
+      for (const key of keys1) {
+        if (sp1.get(key) !== sp2.get(key)) {
+          isChanged = true;
+          break;
+        }
+      }
+    }
+
+    if (isChanged) {
       router.replace(newUrl, { scroll: false });
     }
-  }, [searchQuery, activeCategories, router, searchParams]);
+  }, [searchQuery, activeCategories, schoolFilters, router, searchParams]);
 
   // Re-run geocoding whenever the search query state changes
   useEffect(() => {
@@ -131,6 +165,18 @@ function HomeContent() {
       try {
         // Fetch all categories in parallel
         const promises = activeCategories.map(categoryId => {
+          if (categoryId === 'schools') {
+            const params = new URLSearchParams({ lat: String(searchLocation.lat), lng: String(searchLocation.lng), query: 'Schools', categoryId });
+            // Always fetch broad 'school' type from Google to prevent it from arbitrarily hiding middle/elem schools with bad metadata.
+            params.set('type', 'school'); 
+            
+            // Pass filters to the route so the backend drops the irrelevant ones securely.
+            params.set('sectors', schoolFilters.sectors.join(','));
+            params.set('levels', schoolFilters.levels.join(','));
+            
+            return fetch(`/api/places?${params.toString()}`).then(res => res.json());
+          }
+
           const categoryMeta = CATEGORIES.find(c => c.id === categoryId);
           if (!categoryMeta) return null;
 
@@ -155,7 +201,7 @@ function HomeContent() {
     }
 
     fetchPlaces();
-  }, [searchLocation, activeCategories]);
+  }, [searchLocation, activeCategories, schoolFilters]);
 
   const handleSearch = (address: string) => {
     setSearchQuery(address);
@@ -165,50 +211,27 @@ function HomeContent() {
     setActiveCategories(categories);
   };
 
-  const selectedCategories = CATEGORIES.filter((category) => activeCategories.includes(category.id));
+  const renderableCategories = CATEGORIES.filter(c => c.id !== 'schools');
+  const selectedCategories = renderableCategories.filter((category) => activeCategories.includes(category.id));
 
   return (
     <main className="flex min-h-screen w-full flex-col bg-[#050505] text-white md:h-screen md:flex-row md:overflow-hidden md:p-4 font-sans bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#050505] to-black relative">
       <motion.aside
-        drag={isMobile ? "y" : false}
-        dragControls={dragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0, bottom: isMobile ? window.innerHeight * 0.85 - 36 : 0 }}
-        dragElastic={0.2}
-        onDragEnd={(event, info) => {
-          if (!isMobile) return;
-          
-          const collapseY = window.innerHeight * 0.85 - 36;
-          
-          // Snap down to handle if dragged down hard or far enough
-          if (info.velocity.y > 400 || info.offset.y > 100) {
-            controls.start({ y: collapseY });
-          } 
-          // Snap back up if dragged up hard or far enough
-          else if (info.velocity.y < -400 || info.offset.y < -100) {
-            controls.start({ y: 0 });
-          } 
-          // Otherwise snap to nearest state based on absolute pointer position
-          else {
-            if (info.point.y > window.innerHeight / 2) {
-              controls.start({ y: collapseY });
-            } else {
-              controls.start({ y: 0 });
-            }
-          }
-        }}
-        animate={controls}
+        animate={{ y: isMobile && isSheetCollapsed ? "calc(100% - 64px)" : 0 }}
+        transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
         initial={false}
         className={`z-50 flex w-full flex-col bg-black/40 backdrop-blur-xl md:static md:order-1 md:h-full md:w-[380px] lg:w-[430px] md:overflow-hidden md:rounded-[32px] md:border md:border-white/10 md:shadow-[0_0_40px_rgba(0,0,0,0.8)] ${isMobile ? 'fixed bottom-0 left-0 right-0 rounded-t-[32px] border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.8)]' : ''}`}
         style={{ height: isMobile ? '85vh' : '100%' }}
       >
         {isMobile && (
-          <div
-            className="flex w-full justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing shrink-0 touch-none"
-            onPointerDown={(event) => dragControls.start(event)}
+          <button
+            type="button"
+            className="flex w-full justify-center items-center py-5 shrink-0 touch-none outline-none group"
+            onClick={() => setIsSheetCollapsed(prev => !prev)}
+            aria-label={isSheetCollapsed ? "Expand map details" : "Collapse map details"}
           >
-            <div className="w-12 h-1.5 bg-white/20 rounded-full" />
-          </div>
+            <div className={`w-14 h-1.5 rounded-full transition-colors ${isSheetCollapsed ? 'bg-cyan-400' : 'bg-white/30 group-hover:bg-white/50'}`} />
+          </button>
         )}
 
         <div className="flex h-full flex-col overflow-hidden">
@@ -222,110 +245,101 @@ function HomeContent() {
           >
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200px] h-[200px] bg-cyan-500/5 rounded-full blur-[60px] pointer-events-none" />
 
-            <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_5px_rgba(0,240,255,0.8)] animate-pulse"></span>
-                    Search Area
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Center the map on a neighborhood, address, or town.
-                  </p>
+            <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5 transition-all hover:from-cyan-500/20 hover:to-blue-600/10 hover:border-cyan-500/40">
+              <button
+                type="button"
+                onClick={() => setSearchOpen(o => !o)}
+                className="w-full flex items-center justify-between gap-3 group"
+              >
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <LucideIcons.Search size={16} className="text-cyan-400" />
+                  Search Area
+                </h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  {isSearching && (
+                    <span className="rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 text-xs font-semibold text-cyan-400 animate-pulse">
+                      Searching
+                    </span>
+                  )}
+                  <LucideIcons.ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${searchOpen ? 'rotate-180' : ''}`} />
                 </div>
-                {isSearching && (
-                  <span className="rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 text-xs font-semibold text-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.1)] animate-pulse">
-                    Searching
-                  </span>
-                )}
-              </div>
-              <SearchBar onSearch={handleSearch} isSearching={isSearching} initialQuery={searchQuery} />
+              </button>
+              {searchOpen && (
+                <div className="mt-4">
+                  <SearchBar onSearch={handleSearch} isSearching={isSearching} initialQuery={searchQuery} />
+                </div>
+              )}
             </section>
 
             {addressScore && (
               <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-5 shadow-[0_0_30px_rgba(0,240,255,0.05)] transition-all">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                       <LucideIcons.Sparkles className="text-cyan-400" size={18} />
-                       StreetSmarts Score
-                    </h2>
-                    <p className="text-sm text-slate-400 mt-1">Based on {activeCategories.length} selected categories.</p>
+                <button
+                  type="button"
+                  onClick={() => setScoreOpen(o => !o)}
+                  className="w-full flex items-center justify-between gap-3 group"
+                >
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <LucideIcons.Sparkles size={16} className="text-cyan-400" />
+                    StreetSmarts Score
+                  </h2>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-2xl font-black text-cyan-400">{addressScore.totalScore}</span>
+                    <LucideIcons.ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${scoreOpen ? 'rotate-180' : ''}`} />
                   </div>
-                  <div className="flex items-center justify-center shrink-0 w-16 h-16 rounded-full border-[3px] border-cyan-500/50 bg-black/60 shadow-[0_0_20px_rgba(0,240,255,0.2)]">
-                    <span className="text-2xl font-black text-cyan-400">
-                      {addressScore.totalScore}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="mt-5 grid grid-cols-3 gap-2">
-                   <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
+                </button>
+                {scoreOpen && (
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
                       <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Density</div>
                       <div className="text-sm font-semibold text-white">{addressScore.densityScore}<span className="text-[10px] text-slate-500 ml-0.5">/35</span></div>
-                   </div>
-                   <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
+                    </div>
+                    <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
                       <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Quality</div>
                       <div className="text-sm font-semibold text-white">{addressScore.qualityScore}<span className="text-[10px] text-slate-500 ml-0.5">/35</span></div>
-                   </div>
-                   <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
+                    </div>
+                    <div className="bg-black/40 rounded-xl p-2.5 text-center border border-white/5 shadow-inner">
                       <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Proximity</div>
                       <div className="text-sm font-semibold text-white">{addressScore.proximityScore}<span className="text-[10px] text-slate-500 ml-0.5">/30</span></div>
-                   </div>
-                </div>
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 
             <WeatherPanel searchLocation={searchLocation} />
 
-            <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(o => !o)}
-                className="w-full flex items-end justify-between gap-3 mb-1 group"
-              >
-                <div className="text-left">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                    Filters
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Pick the essentials and lifestyle spots you want to compare.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
-                    <span className="text-white">{selectedCategories.length}</span>/{CATEGORIES.length}
-                  </span>
-                  <LucideIcons.ChevronDown
-                    size={16}
-                    className={`text-slate-500 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`}
-                  />
-                </div>
-              </button>
-              {filtersOpen && (
-                <div className="mt-4">
-                  <CategoryScroller
-                    activeCategories={activeCategories}
-                    onCategoryToggle={handleCategoryToggle}
-                  />
-                </div>
-              )}
-            </section>
+            <SchoolSmartsPanel 
+              filters={schoolFilters}
+              onFiltersChange={setSchoolFilters}
+              isActive={activeCategories.includes('schools')}
+              onToggleActive={() => {
+                const newCats = activeCategories.includes('schools') 
+                  ? activeCategories.filter(c => c !== 'schools') 
+                  : [...activeCategories, 'schools'];
+                setActiveCategories(newCats);
+              }}
+            />
 
             {topPlaces.length > 0 && (
-              <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400/80 flex items-center gap-2">
-                      <LucideIcons.Navigation size={12} /> Closest Places
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      Top {topPlaces.length} nearby spots based on {travelMode === 'walking' ? 'walking' : travelMode === 'transit' ? 'transit' : 'driving'}.
-                    </p>
+              <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5">
+                <button
+                  type="button"
+                  onClick={() => setClosestOpen(o => !o)}
+                  className="w-full flex items-center justify-between gap-3 group"
+                >
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <LucideIcons.Navigation size={16} className="text-cyan-400" />
+                    Closest Places
+                  </h2>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                      <span className="text-white">{topPlaces.length}</span> spots
+                    </span>
+                    <LucideIcons.ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${closestOpen ? 'rotate-180' : ''}`} />
                   </div>
-                </div>
+                </button>
 
-                <div className="space-y-3">
+                {closestOpen && <div className="mt-4 space-y-3">
                   {topPlaces.map(place => {
                     const categoryMeta = CATEGORIES.find(c => c.id === place.category);
                     const IconComponent = categoryMeta ? (LucideIcons as unknown as Record<string, ComponentType<{ size?: number; className?: string }>>)[categoryMeta.iconName] || LucideIcons.MapPin : LucideIcons.MapPin;
@@ -349,6 +363,14 @@ function HomeContent() {
                                 {place.name}
                               </h4>
                               <p className="text-xs font-medium text-slate-400 line-clamp-1">{place.address}</p>
+                              {place.streetSmartsScore && (
+                                <div className="mt-1 flex w-max items-center gap-1.5 rounded border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 shadow-[0_0_10px_rgba(0,240,255,0.1)]">
+                                  <LucideIcons.Sparkles size={10} className="text-cyan-400" />
+                                  <span className="text-[10px] font-bold tracking-widest text-cyan-400 uppercase">
+                                    SchoolSmarts <span className="text-white ml-0.5">{place.streetSmartsScore}</span>
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -365,9 +387,36 @@ function HomeContent() {
                       </div>
                     );
                   })}
-                </div>
+                </div>}
               </section>
             )}
+
+            <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5 transition-all hover:from-cyan-500/20 hover:to-blue-600/10 hover:border-cyan-500/40">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(o => !o)}
+                className="w-full flex items-center justify-between gap-3 group"
+              >
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <LucideIcons.SlidersHorizontal size={16} className="text-cyan-400" />
+                  Filters
+                </h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                    <span className="text-white">{selectedCategories.length}</span>/{CATEGORIES.length}
+                  </span>
+                  <LucideIcons.ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+              {filtersOpen && (
+                <div className="mt-4">
+                  <CategoryScroller
+                    activeCategories={activeCategories}
+                    onCategoryToggle={handleCategoryToggle}
+                  />
+                </div>
+              )}
+            </section>
           </div>
 
           <div className="shrink-0 border-t border-white/5 px-6 py-4 sm:px-8">

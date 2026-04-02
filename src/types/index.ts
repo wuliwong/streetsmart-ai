@@ -12,4 +12,5 @@ export interface MapPlace {
     category: string; // E.g. "coffee", which maps to our CATEGORIES array
     rating?: number;
     userRatingsTotal?: number;
+    streetSmartsScore?: number;
 }

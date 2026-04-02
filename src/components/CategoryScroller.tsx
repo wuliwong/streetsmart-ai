@@ -28,7 +28,7 @@ export function CategoryScroller({ onCategoryToggle, activeCategories }: Categor
 
     return (
         <div className="flex w-full flex-wrap gap-3">
-            {CATEGORIES.map(category => {
+            {CATEGORIES.filter(c => c.id !== 'schools').map(category => {
                 const isActive = activeCategories.includes(category.id);
                 const IconComponent = categoryIcons[category.iconName];
 

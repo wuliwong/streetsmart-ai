@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { PostHogProvider } from '@/components/PostHogProvider';
+import { PostHogInit } from '@/components/PostHogProvider';
 
 // Using Inter for a clean, modern, and highly legible UI typography
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -43,9 +43,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <PostHogProvider>
-          {children}
-        </PostHogProvider>
+        <PostHogInit />
+        {children}
       </body>
     </html>
   );

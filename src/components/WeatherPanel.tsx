@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
-  CloudFog, Wind, Droplets, Thermometer, ChevronDown
+  CloudFog, Wind, Droplets, ChevronDown, CloudSun
 } from 'lucide-react';
 
 interface WeatherData {
@@ -63,28 +63,19 @@ export function WeatherPanel({ searchLocation }: WeatherPanelProps) {
   const { label, Icon } = getCondition(weather.weatherCode);
 
   return (
-    <section className="relative z-10 rounded-[24px] border border-white/10 bg-black/40 backdrop-blur-md p-4 shadow-lg sm:p-5 transition-all hover:bg-black/60 hover:border-white/20">
+    <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5 transition-all hover:from-cyan-500/20 hover:to-blue-600/10 hover:border-cyan-500/40">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-end justify-between gap-3 mb-1 group"
+        className="w-full flex items-center justify-between gap-3 group"
       >
-        <div className="text-left">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-            Current Weather
-          </p>
-          <p className="mt-1 text-sm text-slate-400">
-            Live conditions for this location.
-          </p>
-        </div>
+        <h2 className="text-sm font-bold text-white flex items-center gap-2">
+          <CloudSun size={16} className="text-cyan-400" />
+          Current Weather
+        </h2>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-semibold text-white">
-            {weather.temperature}°F
-          </span>
-          <ChevronDown
-            size={16}
-            className={`text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          />
+          <span className="text-xs font-semibold text-white">{weather.temperature}°F</span>
+          <ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </div>
       </button>
 

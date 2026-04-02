@@ -146,7 +146,7 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
             mapRef.current.flyTo({
                 center: [searchLocation.lng, searchLocation.lat],
                 duration: 2000, // 2 seconds for a dramatic cinematic fly-over
-                zoom: 15,
+                zoom: 13.5,
                 essential: true, // This animation is considered essential with respect to prefers-reduced-motion
             });
         }
@@ -290,6 +290,7 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                     const categoryMeta = CATEGORIES.find(c => c.id === place.category);
                     const IconComponent = categoryMeta ? markerIcons[categoryMeta.iconName] || MapPin : MapPin;
                     const isSelected = selectedPlace?.id === place.id;
+                    const hasCustomScore = place.streetSmartsScore !== undefined;
 
                     return (
                         <Marker
@@ -330,8 +331,17 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                 )}
 
                                 {/* The solid, softly rounded category pin container */}
-                                <div className={`relative z-10 p-2.5 border rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.5)] transition-all duration-300 ${isSelected ? '-translate-y-2 ' + (categoryMeta?.bgColor || 'bg-slate-700') + ' border-white/50' : 'bg-[#1a1a24] border-white/10 group-hover:-translate-y-1 group-hover:border-white/30'}`}>
-                                    <IconComponent size={16} className={`transition-colors ${isSelected ? 'text-white' : categoryMeta ? categoryMeta.iconActiveClass : 'text-slate-400'}`} />
+                                <div className={`relative z-10 border rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.5)] transition-all duration-300 ${isSelected ? '-translate-y-2 ' + (categoryMeta?.bgColor || 'bg-slate-700') + ' border-white/50' : 'bg-[#1a1a24] border-white/10 group-hover:-translate-y-1 group-hover:border-white/30'}`}>
+                                    
+                                    {hasCustomScore && (
+                                      <div className={`absolute -top-2.5 -right-2.5 bg-cyan-400 text-black text-[9px] font-black px-1.5 min-w-[20px] text-center py-[2px] rounded-full shadow-[0_0_10px_rgba(0,240,255,0.8)] border border-cyan-200 z-20 ${isSelected ? 'scale-110 shadow-[0_0_15px_rgba(0,240,255,1)] border-white' : ''}`}>
+                                        {place.streetSmartsScore}
+                                      </div>
+                                    )}
+
+                                    <div className="p-2.5 relative z-10">
+                                      <IconComponent size={16} className={`transition-colors ${isSelected ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' : categoryMeta ? categoryMeta.iconActiveClass : 'text-slate-400'}`} />
+                                    </div>
                                 </div>
 
                                 {/* A softer, small dot to represent the exact anchor point on the ground */}
@@ -460,13 +470,23 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                 <span className="line-clamp-2">{selectedPlace.address || 'Address unavailable'}</span>
                             </div>
 
-                            {selectedPlace.rating && (
+                            {selectedPlace.streetSmartsScore ? (
+                                <div className="flex items-center gap-2 mt-1 text-sm text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1.5 rounded-lg w-max">
+                                    <LucideIcons.Sparkles size={14} className="animate-pulse" />
+                                    <span>SchoolSmarts Score: {selectedPlace.streetSmartsScore}</span>
+                                </div>
+                            ) : selectedPlace.rating ? (
                                 <div className="flex items-center gap-2 text-sm text-amber-400">
                                     <LucideIcons.Star size={14} className="fill-amber-400/20" />
                                     <span className="font-semibold">{selectedPlace.rating}</span>
                                     <span className="text-slate-500 text-xs">({selectedPlace.userRatingsTotal || 0} reviews)</span>
                                 </div>
-                            )}
+                            ) : selectedPlace.category === 'schools' ? (
+                                <div className="flex items-center gap-2 mt-1 px-2.5 py-1 text-xs text-slate-400 bg-white/5 border border-white/10 rounded-md w-max">
+                                    <LucideIcons.School size={12} />
+                                    <span>Non-Public / Score Unavailable</span>
+                                </div>
+                            ) : null}
                         </div>
                     </Popup>
                 )}
