@@ -13,4 +13,11 @@ export interface MapPlace {
     rating?: number;
     userRatingsTotal?: number;
     streetSmartsScore?: number;
+    
+    // Custom School Ranking Extensions
+    stateRank?: number;
+    stateTotal?: number;
+    nationalRank?: number;
+    nationalTotal?: number;
+    schoolLevelLabel?: string;
 }

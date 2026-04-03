@@ -123,13 +123,19 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
             try {
                 const url = new URL(`/api/place-details`, window.location.origin);
                 url.searchParams.set('placeId', selectedPlace.id);
+                url.searchParams.set('category', selectedPlace.category);
 
                 const res = await fetch(url.toString());
                 const data = await res.json();
 
                 onPlaceSelect({
                     ...selectedPlace,
-                    website: data.website || null
+                    website: data.website || null,
+                    stateRank: data.stateRank,
+                    stateTotal: data.stateTotal,
+                    nationalRank: data.nationalRank,
+                    nationalTotal: data.nationalTotal,
+                    schoolLevelLabel: data.schoolLevelLabel
                 });
             } catch (err) {
                 console.error("Failed to lazy load place details", err);
@@ -471,9 +477,25 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                             </div>
 
                             {selectedPlace.streetSmartsScore ? (
-                                <div className="flex items-center gap-2 mt-1 text-sm text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1.5 rounded-lg w-max">
-                                    <LucideIcons.Sparkles size={14} className="animate-pulse" />
-                                    <span>SchoolSmarts Score: {selectedPlace.streetSmartsScore}</span>
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex items-center gap-2 mt-1 text-sm text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1.5 rounded-lg w-max">
+                                        <LucideIcons.Sparkles size={14} className="animate-pulse" />
+                                        <span>SchoolSmarts Score: {selectedPlace.streetSmartsScore}</span>
+                                    </div>
+                                    
+                                    {selectedPlace.stateRank && selectedPlace.nationalRank && (
+                                        <div className="space-y-2 border-t border-white/10 pt-3">
+                                            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Rankings ({selectedPlace.schoolLevelLabel})</div>
+                                            <div className="flex items-center gap-2 text-xs font-medium text-slate-300 bg-white/5 p-1.5 rounded-lg border border-white/5">
+                                                <LucideIcons.Trophy size={13} className="text-yellow-400 shrink-0" />
+                                                <span>State Rank: <strong className="text-white">#{selectedPlace.stateRank.toLocaleString()}</strong> <span className="text-slate-500">of {selectedPlace.stateTotal?.toLocaleString()}</span></span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs font-medium text-slate-300 bg-white/5 p-1.5 rounded-lg border border-white/5">
+                                                <LucideIcons.Globe2 size={13} className="text-blue-400 shrink-0" />
+                                                <span>National Rank: <strong className="text-white">#{selectedPlace.nationalRank.toLocaleString()}</strong> <span className="text-slate-500">of {selectedPlace.nationalTotal?.toLocaleString()}</span></span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : selectedPlace.rating ? (
                                 <div className="flex items-center gap-2 text-sm text-amber-400">
