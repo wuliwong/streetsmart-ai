@@ -22,11 +22,11 @@ function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Initialize state from URL on first load, defaulting to 'schools' if empty
+  // Initialize state from URL on first load — no categories active by default
   const [activeCategories, setActiveCategories] = useState<string[]>(
-    searchParams.get('categories') 
+    searchParams.get('categories')
       ? searchParams.get('categories')!.split(',').filter(Boolean)
-      : ['schools']
+      : []
   );
   
   const [schoolFilters, setSchoolFilters] = useState<SchoolFilters>({
@@ -324,17 +324,44 @@ function HomeContent() {
 
             <WeatherPanel searchLocation={searchLocation} />
 
-            <SchoolSmartsPanel 
+            <SchoolSmartsPanel
               filters={schoolFilters}
               onFiltersChange={setSchoolFilters}
               isActive={activeCategories.includes('schools')}
               onToggleActive={() => {
-                const newCats = activeCategories.includes('schools') 
-                  ? activeCategories.filter(c => c !== 'schools') 
+                const newCats = activeCategories.includes('schools')
+                  ? activeCategories.filter(c => c !== 'schools')
                   : [...activeCategories, 'schools'];
                 setActiveCategories(newCats);
               }}
             />
+
+            <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5 transition-all hover:from-cyan-500/20 hover:to-blue-600/10 hover:border-cyan-500/40">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(o => !o)}
+                className="w-full flex items-center justify-between gap-3 group"
+              >
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <LucideIcons.SlidersHorizontal size={16} className="text-cyan-400" />
+                  Filters
+                </h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                    <span className="text-white">{selectedCategories.length}</span>/{CATEGORIES.length - 1}
+                  </span>
+                  <LucideIcons.ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+              {filtersOpen && (
+                <div className="mt-4">
+                  <CategoryScroller
+                    activeCategories={activeCategories}
+                    onCategoryToggle={handleCategoryToggle}
+                  />
+                </div>
+              )}
+            </section>
 
             {topPlaces.length > 0 && (
               <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5">
@@ -407,32 +434,6 @@ function HomeContent() {
               </section>
             )}
 
-            <section className="relative z-10 rounded-[24px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-600/5 backdrop-blur-md p-4 shadow-[0_0_30px_rgba(0,240,255,0.05)] sm:p-5 transition-all hover:from-cyan-500/20 hover:to-blue-600/10 hover:border-cyan-500/40">
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-3 group"
-              >
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <LucideIcons.SlidersHorizontal size={16} className="text-cyan-400" />
-                  Filters
-                </h2>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-semibold text-slate-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
-                    <span className="text-white">{selectedCategories.length}</span>/{CATEGORIES.length}
-                  </span>
-                  <LucideIcons.ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`} />
-                </div>
-              </button>
-              {filtersOpen && (
-                <div className="mt-4">
-                  <CategoryScroller
-                    activeCategories={activeCategories}
-                    onCategoryToggle={handleCategoryToggle}
-                  />
-                </div>
-              )}
-            </section>
           </div>
 
           <div className="shrink-0 border-t border-white/5 px-6 py-4 sm:px-8">
