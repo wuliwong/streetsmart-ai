@@ -18,6 +18,7 @@ function mapPlace(place: RawPlace, categoryId: string | null) {
         rating: place.rating as number,
         userRatingsTotal: place.user_ratings_total as number,
         streetSmartsScore: undefined as number | undefined,
+        in_district: false as boolean,
     };
 }
 
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
     const query = searchParams.get('query');
     const categoryId = searchParams.get('categoryId');
     const typesParam = searchParams.get('type');
+    const districtId = searchParams.get('districtId'); // For in_district tagging
 
     if (!lat || !lng || !query) {
         return NextResponse.json({ error: 'lat, lng, and query are required' }, { status: 400 });
@@ -73,7 +75,10 @@ export async function GET(request: Request) {
 
         if (categoryId === 'schools') {
             try {
-                // Bulk query the exact UUID array natively avoiding any full table scans mathematically
+                const sectorsParam = searchParams.get('sectors')?.split(',').filter(Boolean) || [];
+                const levelsParam = searchParams.get('levels')?.split(',').filter(Boolean) || [];
+
+                // Bulk query the exact UUID array natively avoiding any full table scans
                 const placeIds = places.map(p => p.id);
                 let schoolData: any[] = [];
                 
@@ -86,16 +91,10 @@ export async function GET(request: Request) {
                 }
                 
                 if (schoolData.length > 0) {
-                    const sectorsParam = searchParams.get('sectors')?.split(',').filter(Boolean) || [];
-                    const levelsParam = searchParams.get('levels')?.split(',').filter(Boolean) || [];
-                    
                     places = places.filter(p => {
-                        // Strict O(1) mathematical ID lookup bounding NCES permanently to Google Places.
-                        // Eradicates all fragile runtime false-positives intrinsically.
                         const match = schoolData.find((s: any) => s.place_id && s.place_id === p.id);
                         
                         if (match) {
-                            // Filter logic based on our proprietary dataset fields
                             let levelMatches = levelsParam.length === 0;
                             if (levelsParam.includes('elementary') && match.school_level === 1) levelMatches = true;
                             if (levelsParam.includes('middle') && match.school_level === 2) levelMatches = true;
@@ -109,12 +108,15 @@ export async function GET(request: Request) {
                             if (sectorsParam.includes('charter') && isCharter) sectorMatches = true;
                             if (sectorsParam.includes('private') && isPrivate) sectorMatches = true;
                             
-                            if (!levelMatches || !sectorMatches) return false; // Drop from map!
+                            if (!levelMatches || !sectorMatches) return false;
 
                             if (match.streetSmartsScore) {
                                 p.rating = match.streetSmartsScore / 20;
                                 p.userRatingsTotal = match.enrollment || 150;
                                 p.streetSmartsScore = match.streetSmartsScore;
+                            }
+                            if (districtId && match.district_id) {
+                                p.in_district = match.district_id === districtId;
                             }
                             return true;
                         } else {
@@ -128,10 +130,61 @@ export async function GET(request: Request) {
                         }
                     });
                 }
+
+                // --- DISTRICT TOP-UP ---
+                // If public schools are selected and we have a districtId, GUARANTEE all public
+                // schools in that district appear — even if Google's radius missed them.
+                if (districtId && sectorsParam.includes('public')) {
+                    // Build level filter for the DB query
+                    const levelNums: number[] = [];
+                    if (levelsParam.includes('elementary') || levelsParam.length === 0) levelNums.push(1);
+                    if (levelsParam.includes('middle') || levelsParam.length === 0) levelNums.push(2);
+                    if (levelsParam.includes('high') || levelsParam.length === 0) levelNums.push(3);
+
+                    const maxDistanceMeters = 16093; // 10 miles limit for Top-Up fallback
+
+                    const { rows: districtSchools } = await pool.query(
+                        `SELECT * FROM public.schools 
+                         WHERE district_id = $1
+                           AND is_private = false
+                           AND place_id IS NOT NULL
+                           AND place_id != 'NOT_FOUND'
+                           AND (school_level = ANY($2::int[]) OR $3)
+                           AND ST_DWithin(
+                             ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+                             ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
+                             $6
+                           )`,
+                        [districtId, levelNums, levelsParam.length === 0, parseFloat(lng as string), parseFloat(lat as string), maxDistanceMeters]
+                    );
+
+                    // Merge: only add schools not already in the results
+                    const existingIds = new Set(places.map(p => p.id));
+                    for (const ds of districtSchools) {
+                        if (!existingIds.has(ds.place_id) && ds.latitude && ds.longitude) {
+                            places.push({
+                                id: ds.place_id as string,
+                                name: ds.school_name as string,
+                                address: ds.school_name as string, // fallback — no address in DB
+                                photoRef: undefined,
+                                lat: ds.latitude as number,
+                                lng: ds.longitude as number,
+                                category: categoryId ?? 'schools',
+                                rating: ds.streetSmartsScore ? (ds.streetSmartsScore as number) / 20 : 3.5,
+                                userRatingsTotal: (ds.enrollment as number) || 150,
+                                streetSmartsScore: (ds.streetSmartsScore as number) || undefined,
+                                in_district: true,
+                                placeTypes: ['school'],
+                            });
+                        }
+                    }
+                }
+
             } catch (err) {
                 console.error("Failed to inject school rankings", err);
             }
         }
+
 
         return NextResponse.json({ places });
 

@@ -135,6 +135,8 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                     stateTotal: data.stateTotal,
                     nationalRank: data.nationalRank,
                     nationalTotal: data.nationalTotal,
+                    countyRank: data.countyRank ?? undefined,
+                    countyTotal: data.countyTotal ?? undefined,
                     schoolLevelLabel: data.schoolLevelLabel
                 });
             } catch (err) {
@@ -335,9 +337,14 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                         <div className="w-2 h-2 bg-black/90 border-b border-r border-white/10 rotate-45 mx-auto -mt-1" />
                                     </div>
                                 )}
-
                                 {/* The solid, softly rounded category pin container */}
-                                <div className={`relative z-10 border rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.5)] transition-all duration-300 ${isSelected ? '-translate-y-2 ' + (categoryMeta?.bgColor || 'bg-slate-700') + ' border-white/50' : 'bg-[#1a1a24] border-white/10 group-hover:-translate-y-1 group-hover:border-white/30'}`}>
+                                <div className={`relative z-10 border rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.5)] transition-all duration-300 ${
+                                    isSelected 
+                                      ? '-translate-y-2 ' + (categoryMeta?.bgColor || 'bg-slate-700') + ' border-white/50' 
+                                      : place.in_district 
+                                        ? 'bg-[#1a1a24] border-2 border-emerald-500 group-hover:-translate-y-1' 
+                                        : 'bg-[#1a1a24] border border-white/10 group-hover:-translate-y-1 group-hover:border-white/30'
+                                }`}>
                                     
                                     {hasCustomScore && (
                                       <div className={`absolute -top-2.5 -right-2.5 bg-cyan-400 text-black text-[9px] font-black px-1.5 min-w-[20px] text-center py-[2px] rounded-full shadow-[0_0_10px_rgba(0,240,255,0.8)] border border-cyan-200 z-20 ${isSelected ? 'scale-110 shadow-[0_0_15px_rgba(0,240,255,1)] border-white' : ''}`}>
@@ -346,11 +353,17 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                     )}
 
                                     <div className="p-2.5 relative z-10">
-                                      <IconComponent size={16} className={`transition-colors ${isSelected ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' : categoryMeta ? categoryMeta.iconActiveClass : 'text-slate-400'}`} />
+                                      <IconComponent size={16} className={`transition-colors ${
+                                          isSelected 
+                                            ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' 
+                                            : place.category === 'schools' 
+                                              ? 'text-yellow-400' 
+                                              : categoryMeta ? categoryMeta.iconActiveClass : 'text-slate-400'
+                                      }`} />
                                     </div>
                                 </div>
 
-                                {/* A softer, small dot to represent the exact anchor point on the ground */}
+                                {/* Ground anchor dot */}
                                 <div className={`mt-1.5 w-1.5 h-1 rounded-full shadow-sm transition-transform ${isSelected ? 'bg-white scale-150' : 'bg-white/30 group-hover:scale-125'}`} />
                             </div>
                         </Marker>
@@ -486,6 +499,12 @@ export function MapView({ onMapLoad, searchLocation, places = [], travelMode, on
                                     {selectedPlace.stateRank && selectedPlace.nationalRank && (
                                         <div className="space-y-2 border-t border-white/10 pt-3">
                                             <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Rankings ({selectedPlace.schoolLevelLabel})</div>
+                                            {selectedPlace.countyRank && (
+                                                <div className="flex items-center gap-2 text-xs font-medium text-slate-300 bg-white/5 p-1.5 rounded-lg border border-white/5">
+                                                    <LucideIcons.Building2 size={13} className="text-emerald-400 shrink-0" />
+                                                    <span>County Rank: <strong className="text-white">#{selectedPlace.countyRank.toLocaleString()}</strong> <span className="text-slate-500">of {selectedPlace.countyTotal?.toLocaleString()}</span></span>
+                                                </div>
+                                            )}
                                             <div className="flex items-center gap-2 text-xs font-medium text-slate-300 bg-white/5 p-1.5 rounded-lg border border-white/5">
                                                 <LucideIcons.Trophy size={13} className="text-yellow-400 shrink-0" />
                                                 <span>State Rank: <strong className="text-white">#{selectedPlace.stateRank.toLocaleString()}</strong> <span className="text-slate-500">of {selectedPlace.stateTotal?.toLocaleString()}</span></span>

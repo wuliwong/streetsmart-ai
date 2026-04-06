@@ -38,6 +38,7 @@ function HomeContent() {
 
   const [isSearching, setIsSearching] = useState(false);
   const [searchLocation, setSearchLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [districtId, setDistrictId] = useState<string | null>(null);
   const [places, setPlaces] = useState<MapPlace[]>([]);
   const [travelMode, setTravelMode] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
@@ -138,7 +139,19 @@ function HomeContent() {
         const res = await fetch(`/api/geocode?address=${encodeURIComponent(searchQuery)}`);
         if (res.ok) {
           const data = await res.json();
-          setSearchLocation({ lat: data.lat, lng: data.lng });
+          const loc = { lat: data.lat, lng: data.lng };
+          setSearchLocation(loc);
+
+          // Immediately resolve school district + county for this address
+          try {
+            const spatialRes = await fetch(`/api/spatial-context?lat=${loc.lat}&lng=${loc.lng}`);
+            if (spatialRes.ok) {
+              const spatialData = await spatialRes.json();
+              setDistrictId(spatialData.district_id || null);
+            }
+          } catch {
+            setDistrictId(null);
+          }
         }
       } catch (err) {
         console.error("Geocoding failed", err);
@@ -173,6 +186,9 @@ function HomeContent() {
             // Pass filters to the route so the backend drops the irrelevant ones securely.
             params.set('sectors', schoolFilters.sectors.join(','));
             params.set('levels', schoolFilters.levels.join(','));
+
+            // Pass resolved district so schools can be tagged in_district
+            if (districtId) params.set('districtId', districtId);
             
             return fetch(`/api/places?${params.toString()}`).then(res => res.json());
           }
@@ -201,7 +217,7 @@ function HomeContent() {
     }
 
     fetchPlaces();
-  }, [searchLocation, activeCategories, schoolFilters]);
+  }, [searchLocation, activeCategories, schoolFilters, districtId]);
 
   const handleSearch = (address: string) => {
     setSearchQuery(address);

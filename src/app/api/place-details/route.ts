@@ -30,17 +30,20 @@ export async function GET(request: Request) {
         if (category === 'schools') {
             const query = `
                 WITH target AS (
-                    SELECT place_id, "streetSmartsScore", state_location, school_level 
+                    SELECT place_id, "streetSmartsScore", state_location, school_level, county_code
                     FROM public.schools 
                     WHERE place_id = $1
                 )
                 SELECT 
                     t.state_location,
                     t.school_level,
+                    t.county_code,
                     (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level) as national_total,
                     (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level AND "streetSmartsScore" > t."streetSmartsScore") + 1 as national_rank,
                     (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level AND state_location = t.state_location) as state_total,
-                    (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level AND state_location = t.state_location AND "streetSmartsScore" > t."streetSmartsScore") + 1 as state_rank
+                    (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level AND state_location = t.state_location AND "streetSmartsScore" > t."streetSmartsScore") + 1 as state_rank,
+                    (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level AND county_code = t.county_code) as county_total,
+                    (SELECT COUNT(*) FROM public.schools WHERE school_level IS NOT DISTINCT FROM t.school_level AND county_code = t.county_code AND "streetSmartsScore" > t."streetSmartsScore") + 1 as county_rank
                 FROM target t;
             `;
             const { rows } = await pool.query(query, [placeId]);
@@ -52,10 +55,13 @@ export async function GET(request: Request) {
                     stateTotal: parseInt(row.state_total, 10),
                     nationalRank: parseInt(row.national_rank, 10),
                     nationalTotal: parseInt(row.national_total, 10),
+                    countyRank: row.county_code ? parseInt(row.county_rank, 10) : null,
+                    countyTotal: row.county_code ? parseInt(row.county_total, 10) : null,
                     schoolLevelLabel: row.school_level ? `${levels[row.school_level] || 'All'} Schools` : 'All Schools'
                 };
             }
         }
+
 
         return NextResponse.json({ website: websiteUrl, ...(ranks || {}) });
     } catch (error) {

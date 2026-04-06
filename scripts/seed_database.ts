@@ -26,7 +26,7 @@ const pool = new Pool({
 });
 
 const DATA_DIR = path.join(process.cwd(), 'src', 'data');
-const INPUT_FILE = path.join(DATA_DIR, 'school_rankings_geocoded.json');
+const INPUT_FILE = path.join(DATA_DIR, 'school_rankings_merged.json');
 
 async function main() {
   console.log('--- StreetSmarts: Universal Postgres Cloud Seeder ---');
@@ -48,6 +48,8 @@ async function main() {
         ncessch TEXT,
         school_name TEXT NOT NULL,
         state_location TEXT NOT NULL,
+        county_code TEXT,
+        district_id TEXT,
         latitude DOUBLE PRECISION,
         longitude DOUBLE PRECISION,
         enrollment INTEGER,
@@ -66,8 +68,12 @@ async function main() {
     const schools: any[] = JSON.parse(rawData);
 
     // Isolate only mathematically validated bounds
-    const verifiableSchools = schools.filter(s => s.place_id && s.place_id !== "NOT_FOUND");
-    console.log(`Prepared ${verifiableSchools.length} mathematically validated schools for direct SQL transfer.`);
+    const filtered = schools.filter(s => s.place_id && s.place_id !== "NOT_FOUND");
+    // Deduplicate by place_id — keep last occurrence (freshest score)
+    const deduped = new Map<string, any>();
+    for (const s of filtered) deduped.set(s.place_id, s);
+    const verifiableSchools = Array.from(deduped.values());
+    console.log(`Prepared ${verifiableSchools.length} deduplicated schools for direct SQL transfer.`);
 
     // 3. Ultra-fast bulk transactional insertion
     const batchSize = 500;
@@ -86,6 +92,8 @@ async function main() {
           school.ncessch || null,
           school.school_name,
           school.state_location,
+          school.county_code?.toString() || null,
+          school.leaid?.toString() || null,
           school.latitude || null,
           school.longitude || null,
           school.enrollment || null,
@@ -97,17 +105,17 @@ async function main() {
           school.streetSmartsScore,
           school.is_private ? true : false
         );
-        const set = Array.from({ length: 14 }, () => `$${paramCounter++}`).join(', ');
+        const set = Array.from({ length: 16 }, () => `$${paramCounter++}`).join(', ');
         return `(${set})`;
       }).join(', ');
 
       const query = `
         INSERT INTO public.schools (
-          place_id, ncessch, school_name, state_location,
+          place_id, ncessch, school_name, state_location, county_code, district_id,
           latitude, longitude, enrollment, teachers_fte, free_or_reduced_price_lunch,
           title_i_status, school_level, charter, "streetSmartsScore", is_private
         ) VALUES ${placeholders}
-        ON CONFLICT (place_id) DO NOTHING;
+        ON CONFLICT (place_id) DO UPDATE SET "streetSmartsScore" = EXCLUDED."streetSmartsScore";
       `;
 
       await client.query(query, values);
